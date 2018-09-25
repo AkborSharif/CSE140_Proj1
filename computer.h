@@ -16,7 +16,7 @@ typedef struct {
   int rs;        /* register numbers for rs, rt and rd */
   int rt;
   int rd;
-  int shamt      // value for shift amount
+  int shamt;      // value for shift amount
   int funct;     // value for function code
 } RRegs;
 

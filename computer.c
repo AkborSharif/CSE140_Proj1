@@ -35,7 +35,7 @@ void InitComputer (FILE* filein, int printingRegisters, int printingMemory,
     for (k=0; k<32; k++) {
         mips.registers[k] = 0;
     }
-    
+
     /* stack pointer - Initialize to highest address of data segment */
     mips.registers[29] = 0x00400000 + (MAXNUMINSTRS+MAXNUMDATA)*4;
 
@@ -44,6 +44,7 @@ void InitComputer (FILE* filein, int printingRegisters, int printingMemory,
     }
 
     k = 0;
+
     while (fread(&instr, 4, 1, filein)) {
 	/*swap to big endian, convert to host byte order. Ignore this.*/
         mips.memory[k] = ntohl(endianSwap(instr));
@@ -175,6 +176,7 @@ void PrintInfo ( int changedReg, int changedMem) {
  *  instruction fetch. 
  */
 unsigned int Fetch ( int addr) {
+    printf("%d\n", mips.memory[(addr-0x00400000)/4]);
     return mips.memory[(addr-0x00400000)/4];
 }
 
@@ -191,6 +193,8 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
     int immedMask = 0xffff;    // 0000 0000 0000 0000 1111 1111 1111 1111
     int addressMask = 0x3ffffff; // 0000 0011 1111 1111 1111 1111 1111 1111
 
+    int signMask = 0x00008000; //used for determining if 16 bit immed is + or -
+
     int opcode = (instr & opMask) >> 26;
     int rs = (instr & rsMask) >> 21;
     int rt = (instr & rtMask) >> 16;
@@ -200,70 +204,77 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
     int immed = instr & immedMask;
     int address = instr & addressMask;
 
+    d->op = opcode;
+
     switch(opcode) {
-        case 0:
+        case 0: //R type instruction
+            // Store the fields of the R type instructions
             d->type = R;
-            switch (funct) {
-                case 0x21: // addu
-                    d->regs.r.rs = rs;
-                    d->regs.r.rt = rt;
-                    d->regs.r.rd = rd;
-                    d->regs.r.shamt = shamt;
-                    break;
-                case 0x23:// subu
-                    break;
-                case 0x00: //sll
-                    break;
-                case 0x02: //srl
-                    break;
-                case 0x24: //and
-                    break;
-                case 0x25: //or
-                    break;
-                case 0x2a: //slt
-                    break;
-                case 0x08: //jr
+            d->regs.r.rs = rs;
+            d->regs.r.rt = rt;
+            d->regs.r.rd = rd;
+            d->regs.r.shamt = shamt;
+            d->regs.r.funct = funct;
+
+            rVals->R_rs = mips.registers[rs];
+            rVals->R_rt = mips.registers[rt];
+            break;
+        case 2: // J type instructions
+        case 3:
+            // Store the fields of the J type instructions
+            d->type = J;
+
+            int pcMask = 0xf0000000;
+            int pcfour = (mips.pc & pcMask);     //4 most significant bits of pc
+
+            switch(opcode) {
+                case 0x2:   // j
+                case 0x3:   // jal
+                    address = address << 2; // add 00 as the least significant bits
+                    address += pcfour;
                     break;
                 default:
                     break;
             }
+
+            d->regs.j.target = address;
             break;
-        case 2:
-        case 3:
-            d->type = J;
-            switch(opcode) {
-                case 0x2: //j
-                    break;
-                case 0x3: //jal
-                    break;
-            }
-            break;
-        case 16:
+        case 16: // Unused coprocessor instructions
         case 17:
         case 18:
         case 19:
             break;
-        default:
+        default:    // I type instructions
+            // Store the fields of the I type instructions
             d->type = I;
-            switch(opcode) {
-                case 0x9: //addiu
-                    break;
-                case 0xc: //andi
-                    break;
-                case 0xd: //ori
-                    break;
-                case 0xf: //lui
-                    break;
-                case 0x4: //beq
-                    break;
-                case 0x5: //bne
-                    break;
-                case 0x23: //lw
-                    break;
-                case 0x2b: //sw
-                    break;
+            d->regs.i.rs = rs;
+            d->regs.i.rt = rt;
 
+            rVals->R_rs = mips.registers[rs];
+            rVals->R_rt = mips.registers[rt];
+
+            switch(opcode) {
+                case 0x4:   // beq
+                case 0x5:   // bne
+                case 0x9:   // addiu
+                case 0x23:  // lw
+                case 0x2b:  // sw
+                    if(signMask & instr) //if 16th bit is 1 -> pad with 1's
+                        immed += 0xffff0000;
+                    break;
+                /* The next two should be in the correct format already */
+                case 0xc:   // andi
+                case 0xd:   // ori
+                    break;
+                /* Pad the immediate with 16 0's on the right*/
+                case 0xf:   // lui
+                    immed = immed << 16;
+                    break;
+                default:
+                    break;
             }
+
+            d->regs.i.addr_or_immed = immed;
     }
 
 }
@@ -273,14 +284,81 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
  *  followed by a newline.
  */
 void PrintInstruction ( DecodedInstr* d) {
-    /* Your code goes here */
+    char* instruction_name[] = {"addu", "subu", "and", "or", "slt", "sll", "srl",
+                                 "jr", "j", "jal", "beq", "bne", "addiu", "andi",
+                                 "ori", "lui", "lw", "sw"};
 
 }
 
 /* Perform computation needed to execute d, returning computed value */
 int Execute ( DecodedInstr* d, RegVals* rVals) {
-    /* Your code goes here */
-  return 0;
+    switch(d->op) {
+        case 0: //Instruction is R-type
+            switch (funct) {
+                case 0x21:  // addu
+                    mips.registers[d->regs.r.rd] = rVals->R_rs + rVals->R_rt;
+                    break;
+                case 0x23:  // subu
+                    mips.registers[d->regs.r.rd] = rVals->R_rs - rVals->R_rt;
+                    break;
+                case 0x24:  // and
+                    mips.registers[d->regs.r.rd] = rVals->R_rs & rVals->R_rt;
+                    break;
+                case 0x25:  // or
+                    mips.registers[d->regs.r.rd] = rVals->R_rs | rVals->R_rt;
+                    break;
+                case 0x2a:  // slt
+                    (rVals->R_rs < rVals->R_rt) ? mips.registers[d->regs.r.rd] = 1 : mips.registers[d->regs.r.rd] = 0;
+                    break;
+                case 0x00:  // sll
+                    mips.registers[d->regs.r.rd] = rVals->R_rt << d->regs.r.shamt;
+                    break;
+                case 0x02:  // srl
+                    mips.registers[d->regs.r.rd] = rVals->R_rt >> d->regs.r.shamt;
+                    break;
+                case 0x08:  // jr
+                    UpdatePC(d, mips.registers[d->regs.r.rs]);
+                    break;
+            }
+        case 2: /* j and jal */
+        case 3:
+            UpdatePC(d, d->regs.j.target);
+            break;
+        case 16: // Coprocessor instructions (unused)
+        case 17:
+        case 18:
+        case 19:
+            break;
+        default:    // I-Type instructions
+            switch(d->op) {
+                case 0x4:   // beq
+                    if(d->regs.i.rs == d->regs.i.rt) {
+                        UpdatePC(d, regs.i.addr_or_immed);
+                    }
+                    break;
+                case 0x5:   // bne
+                    if(d->regs.i.rs != d->regs.i.rt) {
+                        UpdatePC(d, regs.i.addr_or_immed);
+                    }
+                    break;
+                case 0x9:   // addiu
+                    mips.registers[d->regs.i.rt] = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
+                    break;
+                case 0x23:  // lw
+                    int i = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
+                    rVals->R_rt = mips.memory[i];
+                    break;
+                case 0x2b:  // sw
+                    break;
+                case 0xc:   // andi
+                case 0xd:   // ori
+                    break;
+                case 0xf:   // lui
+                    break;
+            break;
+    }
+
+    return 0;
 }
 
 /* 
@@ -290,6 +368,19 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
  */
 void UpdatePC ( DecodedInstr* d, int val) {
     mips.pc+=4;
+
+    if(d->type == R && d->regs.r.funct == 0x08) {
+        mips.pc = val;
+        return;
+    }
+
+    if(d->type == J) {
+        if (d->op == 3) {
+            mips.registers[31] = mips.pc + 4;
+        }
+        mips.pc = val;
+    }
+
     /* Your code goes here */
 }
 
