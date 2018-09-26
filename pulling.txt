@@ -1,0 +1,3 @@
+To pull from the repo use the command:
+
+git fetch origin
