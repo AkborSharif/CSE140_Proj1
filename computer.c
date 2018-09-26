@@ -292,37 +292,40 @@ void PrintInstruction ( DecodedInstr* d) {
 
 /* Perform computation needed to execute d, returning computed value */
 int Execute ( DecodedInstr* d, RegVals* rVals) {
+
+    int val = 0;
+
     switch(d->op) {
         case 0: //Instruction is R-type
             switch (funct) {
                 case 0x21:  // addu
-                    mips.registers[d->regs.r.rd] = rVals->R_rs + rVals->R_rt;
+                    val = rVals->R_rs + rVals->R_rt;
                     break;
                 case 0x23:  // subu
-                    mips.registers[d->regs.r.rd] = rVals->R_rs - rVals->R_rt;
+                    val = rVals->R_rs - rVals->R_rt;
                     break;
                 case 0x24:  // and
-                    mips.registers[d->regs.r.rd] = rVals->R_rs & rVals->R_rt;
+                    val = rVals->R_rs & rVals->R_rt;
                     break;
                 case 0x25:  // or
-                    mips.registers[d->regs.r.rd] = rVals->R_rs | rVals->R_rt;
+                    val = rVals->R_rs | rVals->R_rt;
                     break;
                 case 0x2a:  // slt
-                    (rVals->R_rs < rVals->R_rt) ? mips.registers[d->regs.r.rd] = 1 : mips.registers[d->regs.r.rd] = 0;
+                    (rVals->R_rs < rVals->R_rt) ? val = 1 : val = 0;
                     break;
                 case 0x00:  // sll
-                    mips.registers[d->regs.r.rd] = rVals->R_rt << d->regs.r.shamt;
+                    val = rVals->R_rt << d->regs.r.shamt;
                     break;
                 case 0x02:  // srl
-                    mips.registers[d->regs.r.rd] = rVals->R_rt >> d->regs.r.shamt;
+                    val = rVals->R_rt >> d->regs.r.shamt;
                     break;
                 case 0x08:  // jr
-                    UpdatePC(d, mips.registers[d->regs.r.rs]);
+                    val = mips.registers[d->regs.r.rs];
                     break;
             }
         case 2: /* j and jal */
         case 3:
-            UpdatePC(d, d->regs.j.target);
+            val = d->regs.j.target;
             break;
         case 16: // Coprocessor instructions (unused)
         case 17:
@@ -333,17 +336,18 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
             switch(d->op) {
                 case 0x4:   // beq
                     if(d->regs.i.rs == d->regs.i.rt) {
-                        UpdatePC(d, regs.i.addr_or_immed);
+                        val = d->regs.i.addr_or_immed;
                     }
                     break;
                 case 0x5:   // bne
                     if(d->regs.i.rs != d->regs.i.rt) {
-                        UpdatePC(d, regs.i.addr_or_immed);
+                        val = d->regs.i.addr_or_immed;
                     }
                     break;
                 case 0x9:   // addiu
-                    mips.registers[d->regs.i.rt] = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
+                    val = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
                     break;
+                //continue here
                 case 0x23:  // lw
                     int i = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
                     rVals->R_rt = mips.memory[i];
