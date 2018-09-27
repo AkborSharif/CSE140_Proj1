@@ -1,3 +1,4 @@
-To pull from the repo use the command:
+To pull from the repo, try using the command:
 
-git fetch origin
+git pull origin master
+
