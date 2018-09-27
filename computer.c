@@ -297,7 +297,7 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
 
     switch(d->op) {
         case 0: //Instruction is R-type
-            switch (funct) {
+            switch (d->regs.r.funct) {
                 case 0x21:  // addu
                     val = rVals->R_rs + rVals->R_rt;
                     break;
@@ -311,7 +311,8 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
                     val = rVals->R_rs | rVals->R_rt;
                     break;
                 case 0x2a:  // slt
-                    (rVals->R_rs < rVals->R_rt) ? val = 1 : val = 0;
+                    if (rVals->R_rs < rVals->R_rt)
+                         val = 1;
                     break;
                 case 0x00:  // sll
                     val = rVals->R_rt << d->regs.r.shamt;
@@ -345,24 +346,20 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
                     }
                     break;
                 case 0x9:   // addiu
-                    val = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
-                    break;
-                //continue here
                 case 0x23:  // lw
-                    int i = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
-                    rVals->R_rt = mips.memory[i];
-                    break;
                 case 0x2b:  // sw
-                    break;
                 case 0xc:   // andi
                 case 0xd:   // ori
+                    val = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
                     break;
                 case 0xf:   // lui
+                    val = d->regs.i.addr_or_immed;
                     break;
             break;
+            }
     }
 
-    return 0;
+    return val;
 }
 
 /* 
