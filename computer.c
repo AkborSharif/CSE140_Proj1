@@ -176,7 +176,6 @@ void PrintInfo ( int changedReg, int changedMem) {
  *  instruction fetch. 
  */
 unsigned int Fetch ( int addr) {
-    printf("%d\n", mips.memory[(addr-0x00400000)/4]);
     return mips.memory[(addr-0x00400000)/4];
 }
 
@@ -370,19 +369,30 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
 void UpdatePC ( DecodedInstr* d, int val) {
     mips.pc+=4;
 
-    if(d->type == R && d->regs.r.funct == 0x08) {
+    /* Instructions that update the PC
+          I       J       R
+        -beq    -j      -jr
+        -bne    -jal                    */
+
+    if(d->type == R && d->regs.r.funct == 0x08) { //For jr
         mips.pc = val;
         return;
     }
 
-    if(d->type == J) {
-        if (d->op == 3) {
-            mips.registers[31] = mips.pc + 4;
+    if(d->type == J) {          //For j and jal
+        if (d->op == 3) {       //For jal, set $ra to be the next instruction
+            mips.registers[31] = mips.pc + 4; // Should this happen in the write back stage?
         }
-        mips.pc = val;
+        mips.pc = val;          //For j and jal, set PC to correct value
     }
 
-    /* Your code goes here */
+
+    if(d->type == I && (d->op == 0x4 || d->op == 0x5)) {  //For beq and bne
+        if (val) {      //If non-zero value, then branch must be taken
+            mips.pc = val;
+        }
+    }
+
 }
 
 /*
