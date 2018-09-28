@@ -283,9 +283,81 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
  *  followed by a newline.
  */
 void PrintInstruction ( DecodedInstr* d) {
-    char* instruction_name[] = {"addu", "subu", "and", "or", "slt", "sll", "srl",
+    char* names[] = {"addu", "subu", "and", "or", "slt", "sll", "srl",
                                  "jr", "j", "jal", "beq", "bne", "addiu", "andi",
                                  "ori", "lui", "lw", "sw"};
+
+    char* name;
+
+    switch(d->op) {
+        case 0: //Instruction is R-type
+            switch (d->regs.r.funct) {
+                case 0x21:  // addu
+                    printf("addu\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                    break;
+                case 0x23:  // subu
+                    printf("subu\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                    break;
+                case 0x24:  // and
+                    printf("and\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                    break;
+                case 0x25:  // or
+                    printf("or\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                    break;
+                case 0x2a:  // slt
+                    printf("slt\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                    break;
+                case 0x00:  // sll
+                    printf("sll\t$%d, $%d, %d\n", d->regs.r.rt, d->regs.r.rt, d->regs.r.shamt);
+                    break;
+                case 0x02:  // srl
+                    printf("srl\t$%d, $%d, %d\n", d->regs.r.rt, d->regs.r.rt, d->regs.r.shamt);
+                    break;
+                case 0x08:  // jr
+                    printf("jr\t$%d\n", d->regs.r.rs);
+                    break;
+            }
+            break;
+        case 2: // j
+            printf("j\t0x%8x\n", d->regs.j.target);
+            break;
+        case 3:
+            printf("jal\t0x%8x\n", d->regs.j.target);
+            break;
+        case 16: // Coprocessor instructions (unused)
+        case 17:
+        case 18:
+        case 19:
+            break;
+        default:    // I-Type instructions
+            switch(d->op) {
+                case 0x4:   // beq
+                    printf("beq\t$%d, $%d, 0x%8x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                    break;
+                case 0x5:   // bne
+                    printf("bne\t$%d, $%d, 0x%8x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                    break;
+                case 0x9:   // addiu
+                    printf("addiu\t$%d, $%d, %d\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                    break;
+                case 0x23:  // lw
+                    printf("lw\t$%d, %d($%d)\n", d->regs.i.rt, d->regs.i.addr_or_immed, d->regs.i.rs);
+                    break;
+                case 0x2b:  // sw
+                    printf("lw\t$%d, %d($%d)\n", d->regs.i.rt, d->regs.i.addr_or_immed, d->regs.i.rs);
+                    break;
+                case 0xc:   // andi
+                    printf("andi\t$%d, $%d, 0x%x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                    break;
+                case 0xd:   // ori
+                    printf("ori\t$%d, $%d, 0x%x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                    break;
+                case 0xf:   // lui
+                    printf("lui\t$%d, 0x%x", d->regs.i.rt, d->regs.i.addr_or_immed);
+                    break;
+            break;
+            }
+    }
 
 }
 
@@ -381,7 +453,7 @@ void UpdatePC ( DecodedInstr* d, int val) {
 
     if(d->type == J) {          //For j and jal
         if (d->op == 3) {       //For jal, set $ra to be the next instruction
-            mips.registers[31] = mips.pc + 4; // Should this happen in the write back stage?
+            mips.registers[31] = mips.pc + 4; // Should this happen in the write back stage? How can it?
         }
         mips.pc = val;          //For j and jal, set PC to correct value
     }
