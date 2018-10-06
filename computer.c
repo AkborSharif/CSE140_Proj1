@@ -183,13 +183,13 @@ unsigned int Fetch ( int addr) {
 /* Decode instr, returning decoded instruction. */
 void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
     /* Your code goes here */
-    int opMask = 0xfc000000; // 1111 1100 0000 0000 0000 0000 0000 0000
-    int rsMask = 0x3e00000;  // 0000 0011 1110 0000 0000 0000 0000 0000
-    int rtMask = 0x1f0000;   // 0000 0000 0001 1111 0000 0000 0000 0000
-    int rdMask = 0xf800;     // 0000 0000 0000 0000 1111 1000 0000 0000
-    int shamtMask = 0x7c0;   // 0000 0000 0000 0000 0000 0111 1100 0000
-    int functMask = 0x3f;    // 0000 0000 0000 0000 0000 0000 0011 1111
-    int immedMask = 0xffff;    // 0000 0000 0000 0000 1111 1111 1111 1111
+    int opMask = 0xfc000000;     // 1111 1100 0000 0000 0000 0000 0000 0000
+    int rsMask = 0x3e00000;      // 0000 0011 1110 0000 0000 0000 0000 0000
+    int rtMask = 0x1f0000;       // 0000 0000 0001 1111 0000 0000 0000 0000
+    int rdMask = 0xf800;         // 0000 0000 0000 0000 1111 1000 0000 0000
+    int shamtMask = 0x7c0;       // 0000 0000 0000 0000 0000 0111 1100 0000
+    int functMask = 0x3f;        // 0000 0000 0000 0000 0000 0000 0011 1111
+    int immedMask = 0xffff;      // 0000 0000 0000 0000 1111 1111 1111 1111
     int addressMask = 0x3ffffff; // 0000 0011 1111 1111 1111 1111 1111 1111
 
     int signMask = 0x00008000; //used for determining if 16 bit immed is + or -
@@ -215,6 +215,9 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
             d->regs.r.shamt = shamt;
             d->regs.r.funct = funct;
 
+            if(funct != 0x8 && d->regs.r.rd == 0)   //Cannot write $0
+                exit(0);
+
             rVals->R_rs = mips.registers[rs];
             rVals->R_rt = mips.registers[rt];
             break;
@@ -223,18 +226,10 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
             // Store the fields of the J type instructions
             d->type = J;
 
-            int pcMask = 0xf0000000;
-            int pcfour = (mips.pc & pcMask);     //4 most significant bits of pc
+            int pcfour = (mips.pc & 0xf0000000);     //4 most significant bits of pc
 
-            switch(opcode) {
-                case 0x2:   // j
-                case 0x3:   // jal
-                    address = address << 2; // add 00 as the least significant bits
-                    address += pcfour;
-                    break;
-                default:
-                    break;
-            }
+            address = address << 2; // add 00 as the least significant bits
+            address += pcfour;
 
             d->regs.j.target = address;
             break;
@@ -249,12 +244,21 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
             d->regs.i.rs = rs;
             d->regs.i.rt = rt;
 
+            if(opcode != 0x2b && opcode != 0x4 &&
+               opcode != 0x5  && d->regs.r.rt == 0)   //Cannot write $0
+               exit(0);                      //Exclude: sw, beq, and bne
+
             rVals->R_rs = mips.registers[rs];
             rVals->R_rt = mips.registers[rt];
 
             switch(opcode) {
                 case 0x4:   // beq
                 case 0x5:   // bne
+                    if(signMask & instr)
+                        immed += 0xfffc0000; //sign-extend
+                    immed = immed << 2; //add 00 to the end
+                    immed += mips.pc + 4;
+                    break;
                 case 0x9:   // addiu
                 case 0x23:  // lw
                 case 0x2b:  // sw
@@ -283,9 +287,76 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
  *  followed by a newline.
  */
 void PrintInstruction ( DecodedInstr* d) {
-    char* instruction_name[] = {"addu", "subu", "and", "or", "slt", "sll", "srl",
-                                 "jr", "j", "jal", "beq", "bne", "addiu", "andi",
-                                 "ori", "lui", "lw", "sw"};
+
+    switch(d->op) {
+            case 0: //Instruction is R-type
+                switch (d->regs.r.funct) {
+                    case 0x21:  // addu
+                        printf("addu\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                        break;
+                    case 0x23:  // subu
+                        printf("subu\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                        break;
+                    case 0x24:  // and
+                        printf("and\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                        break;
+                    case 0x25:  // or
+                        printf("or\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                        break;
+                    case 0x2a:  // slt
+                        printf("slt\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
+                        break;
+                    case 0x00:  // sll
+                        printf("sll\t$%d, $%d, %d\n", d->regs.r.rt, d->regs.r.rt, d->regs.r.shamt);
+                        break;
+                    case 0x02:  // srl
+                        printf("srl\t$%d, $%d, %d\n", d->regs.r.rt, d->regs.r.rt, d->regs.r.shamt);
+                        break;
+                    case 0x08:  // jr
+                        printf("jr\t$%d\n", d->regs.r.rs);
+                        break;
+                }
+                break;
+            case 2: // j
+                printf("j\t0x%.8x\n", d->regs.j.target);
+                break;
+            case 3:
+                printf("jal\t0x%.8x\n", d->regs.j.target);
+                break;
+            case 16: // Coprocessor instructions (unused)
+            case 17:
+            case 18:
+            case 19:
+                break;
+            default:    // I-Type instructions
+                switch(d->op) {
+                    case 0x4:   // beq
+                        printf("beq\t$%d, $%d, 0x%.8x\n", d->regs.i.rs, d->regs.i.rt, d->regs.i.addr_or_immed);
+                        break;
+                    case 0x5:   // bne
+                        printf("bne\t$%d, $%d, 0x%.8x\n", d->regs.i.rs, d->regs.i.rt, d->regs.i.addr_or_immed);
+                        break;
+                    case 0x9:   // addiu
+                        printf("addiu\t$%d, $%d, %d\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                        break;
+                    case 0x23:  // lw
+                        printf("lw\t$%d, %d($%d)\n", d->regs.i.rt, d->regs.i.addr_or_immed, d->regs.i.rs);
+                        break;
+                    case 0x2b:  // sw
+                        printf("lw\t$%d, %d($%d)\n", d->regs.i.rt, d->regs.i.addr_or_immed, d->regs.i.rs);
+                        break;
+                    case 0xc:   // andi
+                        printf("andi\t$%d, $%d, 0x%x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                        break;
+                    case 0xd:   // ori
+                        printf("ori\t$%d, $%d, 0x%x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
+                        break;
+                    case 0xf:   // lui
+                        printf("lui\t$%d, 0x%x", d->regs.i.rt, d->regs.i.addr_or_immed);
+                        break;
+                }
+                break;
+    }
 
 }
 
@@ -323,9 +394,12 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
                     val = mips.registers[d->regs.r.rs];
                     break;
             }
+            rVals->R_rd = val;
+            break;
         case 2: /* j and jal */
         case 3:
             val = d->regs.j.target;
+            rVals->R_rt = mips.pc + 4;
             break;
         case 16: // Coprocessor instructions (unused)
         case 17:
@@ -335,12 +409,12 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
         default:    // I-Type instructions
             switch(d->op) {
                 case 0x4:   // beq
-                    if(d->regs.i.rs == d->regs.i.rt) {
+                    if(rVals->R_rs == rVals->R_rt) {
                         val = d->regs.i.addr_or_immed;
                     }
                     break;
                 case 0x5:   // bne
-                    if(d->regs.i.rs != d->regs.i.rt) {
+                    if(rVals->R_rs != rVals->R_rt) {
                         val = d->regs.i.addr_or_immed;
                     }
                     break;
@@ -350,12 +424,13 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
                 case 0xc:   // andi
                 case 0xd:   // ori
                     val = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
+                    rVals->R_rt = val;
                     break;
                 case 0xf:   // lui
                     val = d->regs.i.addr_or_immed;
                     break;
-            break;
             }
+            break;
     }
 
     return val;
@@ -380,10 +455,7 @@ void UpdatePC ( DecodedInstr* d, int val) {
     }
 
     if(d->type == J) {          //For j and jal
-        if (d->op == 3) {       //For jal, set $ra to be the next instruction
-            mips.registers[31] = mips.pc + 4; // Should this happen in the write back stage?
-        }
-        mips.pc = val;          //For j and jal, set PC to correct value
+        mips.pc = val;          //Set PC to correct value
     }
 
 
@@ -406,16 +478,57 @@ void UpdatePC ( DecodedInstr* d, int val) {
  *
  */
 int Mem( DecodedInstr* d, int val, int *changedMem) {
-    /* Your code goes here */
-  return 0;
+    int index = (val & 0xffff) >> 2;
+
+    if(d->op == 0x23) { //lw
+        *changedMem = -1;
+        rVals.R_rd = mips.memory[index]; //use the unused Rd for storage
+        return mips.memory[index];
+    }
+    else if(d->op == 0x2b) { //sw
+        *changedMem = val;
+        mips.memory[index] = rVals.R_rd;
+    }
+    return -1;
 }
 
-/* 
+/*
  * Write back to register. If the instruction modified a register--
  * (including jal, which modifies $ra) --
  * put the index of the modified register in *changedReg,
  * otherwise put -1 in *changedReg.
  */
 void RegWrite( DecodedInstr* d, int val, int *changedReg) {
-    /* Your code goes here */
+    if(d->op == 0x0) {
+        *changedReg = d->regs.r.rd;
+        mips.registers[d->regs.r.rd] = rVals.R_rd;
+    }
+    else {
+        switch(d->op) {
+            case 0x2:   //Do nothing for j
+                *changedReg = -1;
+                break;
+            case 0x3:   //Set $ra for jal
+                *changedReg = 31;
+                mips.registers[31] = rVals.R_rt;
+                break;
+            case 0x9:   //addiu
+            case 0xc:   //andi
+            case 0xd:   //ori
+                *changedReg = d->regs.i.rt;
+                mips.registers[d->regs.i.rt] = rVals.R_rt;
+                break;
+            case 0x23:  //lw
+                *changedReg = d->regs.i.rt;
+                mips.registers[d->regs.i.rt] = rVals.R_rd;
+                break;
+            case 0xf:   //lui
+                *changedReg = d->regs.i.rt;
+                mips.registers[d->regs.i.rt] = d->regs.i.addr_or_immed;
+                break;
+            default:
+                *changedReg = -1;
+                break;
+        }
+    }
 }
