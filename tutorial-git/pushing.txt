@@ -1,0 +1,15 @@
+To push a file first add it using:
+
+git add <filename>
+
+or you can add all files using
+
+git add -a
+
+Then commit it using:
+
+git commit
+
+Then push it using:
+
+git push origin master

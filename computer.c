@@ -215,7 +215,7 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
             d->regs.r.shamt = shamt;
             d->regs.r.funct = funct;
 
-            if(funct != 0x8 && d->regs.r.rd == 0)   //Cannot write $0
+            if(funct != 0x8 && d->regs.r.rd == 0)   //Cannot write $0, exclude jr
                 exit(0);
 
             rVals->R_rs = mips.registers[rs];
@@ -237,6 +237,7 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
         case 17:
         case 18:
         case 19:
+            exit(0);
             break;
         default:    // I type instructions
             // Store the fields of the I type instructions
@@ -315,6 +316,9 @@ void PrintInstruction ( DecodedInstr* d) {
                     case 0x08:  // jr
                         printf("jr\t$%d\n", d->regs.r.rs);
                         break;
+                    default:    //Unsupported R-type
+                        exit(0);
+                        break;
                 }
                 break;
             case 2: // j
@@ -343,7 +347,7 @@ void PrintInstruction ( DecodedInstr* d) {
                         printf("lw\t$%d, %d($%d)\n", d->regs.i.rt, d->regs.i.addr_or_immed, d->regs.i.rs);
                         break;
                     case 0x2b:  // sw
-                        printf("lw\t$%d, %d($%d)\n", d->regs.i.rt, d->regs.i.addr_or_immed, d->regs.i.rs);
+                        printf("sw\t$%d, %d($%d)\n", d->regs.i.rt, d->regs.i.addr_or_immed, d->regs.i.rs);
                         break;
                     case 0xc:   // andi
                         printf("andi\t$%d, $%d, 0x%x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
@@ -352,7 +356,7 @@ void PrintInstruction ( DecodedInstr* d) {
                         printf("ori\t$%d, $%d, 0x%x\n", d->regs.i.rt, d->regs.i.rs, d->regs.i.addr_or_immed);
                         break;
                     case 0xf:   // lui
-                        printf("lui\t$%d, 0x%x", d->regs.i.rt, d->regs.i.addr_or_immed);
+                        printf("lui\t$%d, 0x%x\n", d->regs.i.rt, d->regs.i.addr_or_immed >> 16);
                         break;
                 }
                 break;
@@ -478,7 +482,7 @@ void UpdatePC ( DecodedInstr* d, int val) {
  *
  */
 int Mem( DecodedInstr* d, int val, int *changedMem) {
-    int index = (val & 0xffff) >> 2;
+    int index = (val & 0xffff) >> 2;    //Map from memory address to index into mips.memory[]
 
     if(d->op == 0x23) { //lw
         *changedMem = -1;
@@ -487,7 +491,7 @@ int Mem( DecodedInstr* d, int val, int *changedMem) {
     }
     else if(d->op == 0x2b) { //sw
         *changedMem = val;
-        mips.memory[index] = rVals.R_rd;
+        mips.memory[index] = rVals.R_rt;
     }
     return -1;
 }
@@ -499,7 +503,7 @@ int Mem( DecodedInstr* d, int val, int *changedMem) {
  * otherwise put -1 in *changedReg.
  */
 void RegWrite( DecodedInstr* d, int val, int *changedReg) {
-    if(d->op == 0x0) {
+    if(d->op == 0x0) {  //All R-type write to register rd
         *changedReg = d->regs.r.rd;
         mips.registers[d->regs.r.rd] = rVals.R_rd;
     }

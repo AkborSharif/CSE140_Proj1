@@ -1,0 +1,4 @@
+To pull from the repo, try using the command:
+
+git pull origin master
+
