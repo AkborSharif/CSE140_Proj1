@@ -255,9 +255,13 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
             switch(opcode) {
                 case 0x4:   // beq
                 case 0x5:   // bne
-                    if(signMask & instr)
+                    if(signMask & immed) {
+                        immed = immed << 2; //add 00 to the end
                         immed += 0xfffc0000; //sign-extend
-                    immed = immed << 2; //add 00 to the end
+                    }
+                    else {
+                        immed = immed << 2; //add 00 to end
+                    }
                     immed += mips.pc + 4;
                     break;
                 case 0x9:   // addiu
@@ -269,6 +273,7 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
                 /* The next two should be in the correct format already */
                 case 0xc:   // andi
                 case 0xd:   // ori
+                 //   immed = immed & 0x0000ffff;
                     break;
                 /* Pad the immediate with 16 0's on the right*/
                 case 0xf:   // lui
@@ -425,10 +430,13 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
                 case 0x9:   // addiu
                 case 0x23:  // lw
                 case 0x2b:  // sw
+                    val = rVals->R_rs + d->regs.i.addr_or_immed;
+                    break;
                 case 0xc:   // andi
+                    val = rVals->R_rs & d->regs.i.addr_or_immed;
+                    break;
                 case 0xd:   // ori
-                    val = mips.registers[d->regs.i.rs] + d->regs.i.addr_or_immed;
-                    rVals->R_rt = val;
+                    val = rVals->R_rs | d->regs.i.addr_or_immed;
                     break;
                 case 0xf:   // lui
                     val = d->regs.i.addr_or_immed;
@@ -486,14 +494,18 @@ int Mem( DecodedInstr* d, int val, int *changedMem) {
 
     if(d->op == 0x23) { //lw
         *changedMem = -1;
-        rVals.R_rd = mips.memory[index]; //use the unused Rd for storage
-        return mips.memory[index];
+        val = mips.memory[index];
     }
     else if(d->op == 0x2b) { //sw
         *changedMem = val;
         mips.memory[index] = rVals.R_rt;
+        val = mips.memory[index];
     }
-    return -1;
+    else {
+        *changedMem = -1;
+    }
+
+    return val;
 }
 
 /*
@@ -520,11 +532,11 @@ void RegWrite( DecodedInstr* d, int val, int *changedReg) {
             case 0xc:   //andi
             case 0xd:   //ori
                 *changedReg = d->regs.i.rt;
-                mips.registers[d->regs.i.rt] = rVals.R_rt;
+                mips.registers[d->regs.i.rt] = val;
                 break;
             case 0x23:  //lw
                 *changedReg = d->regs.i.rt;
-                mips.registers[d->regs.i.rt] = rVals.R_rd;
+                mips.registers[d->regs.i.rt] = val;
                 break;
             case 0xf:   //lui
                 *changedReg = d->regs.i.rt;
