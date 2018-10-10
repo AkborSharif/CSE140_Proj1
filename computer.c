@@ -183,7 +183,7 @@ unsigned int Fetch ( int addr) {
 /* Decode instr, returning decoded instruction. */
 void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
     /* Your code goes here */
-    int opMask = 0xfc000000;     // 1111 1100 0000 0000 0000 0000 0000 0000
+    int opMask = 0x3f;           // 0000 0000 0000 0000 0000 0000 0011 1111
     int rsMask = 0x3e00000;      // 0000 0011 1110 0000 0000 0000 0000 0000
     int rtMask = 0x1f0000;       // 0000 0000 0001 1111 0000 0000 0000 0000
     int rdMask = 0xf800;         // 0000 0000 0000 0000 1111 1000 0000 0000
@@ -194,7 +194,7 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
 
     int signMask = 0x00008000; //used for determining if 16 bit immed is + or -
 
-    int opcode = (instr & opMask) >> 26;
+    int opcode = (instr >> 26) & opMask;
     int rs = (instr & rsMask) >> 21;
     int rt = (instr & rtMask) >> 16;
     int rd = (instr & rdMask) >> 11;
@@ -331,11 +331,6 @@ void PrintInstruction ( DecodedInstr* d) {
                 break;
             case 3:
                 printf("jal\t0x%.8x\n", d->regs.j.target);
-                break;
-            case 16: // Coprocessor instructions (unused)
-            case 17:
-            case 18:
-            case 19:
                 break;
             default:    // I-Type instructions
                 switch(d->op) {
@@ -491,12 +486,12 @@ void UpdatePC ( DecodedInstr* d, int val) {
  */
 int Mem( DecodedInstr* d, int val, int *changedMem) {
     int index = (val & 0xffff) >> 2;    //Map from memory address to index into mips.memory[]
-
+                                        //index = low 16 bits of address divided by 4
     if(d->op == 0x23) { //lw
         *changedMem = -1;
         val = mips.memory[index];
     }
-    else if(d->op == 0x2b) { //sw
+    else if(d->op == 0x2b) { //sw (only instruction that changes memory)
         *changedMem = val;
         mips.memory[index] = rVals.R_rt;
         val = mips.memory[index];
@@ -515,15 +510,12 @@ int Mem( DecodedInstr* d, int val, int *changedMem) {
  * otherwise put -1 in *changedReg.
  */
 void RegWrite( DecodedInstr* d, int val, int *changedReg) {
-    if(d->op == 0x0) {  //All R-type write to register rd
-        *changedReg = d->regs.r.rd;
+    if(d->op == 0x0 && d->regs.r.funct != 0x8) {  //All R-type write to register rd
+        *changedReg = d->regs.r.rd;         // except jr
         mips.registers[d->regs.r.rd] = rVals.R_rd;
     }
     else {
         switch(d->op) {
-            case 0x2:   //Do nothing for j
-                *changedReg = -1;
-                break;
             case 0x3:   //Set $ra for jal
                 *changedReg = 31;
                 mips.registers[31] = rVals.R_rt;
@@ -542,7 +534,7 @@ void RegWrite( DecodedInstr* d, int val, int *changedReg) {
                 *changedReg = d->regs.i.rt;
                 mips.registers[d->regs.i.rt] = d->regs.i.addr_or_immed;
                 break;
-            default:
+            default:    //All other instruction don't change a register
                 *changedReg = -1;
                 break;
         }

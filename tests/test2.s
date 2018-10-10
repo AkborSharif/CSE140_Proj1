@@ -1,9 +1,9 @@
 .text 
 
-      addi $t0, $0, 10
-      addi $t1, $0, 12
+      addiu $t0, $0, 10
+      addiu $t1, $0, 12
       
-      sub $t2, $t1, $t0
+      subu $t2, $t1, $t0
       
       srl $t3, $t1, 2
       
@@ -14,4 +14,3 @@
       or $t6, $t0, $t1
     
       slt $t7, $t0, $t1
-
