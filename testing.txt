@@ -1,0 +1,8 @@
+Testing strategy for project 1:
+
+1. First use the provided test case to test program
+2. Create a simple test case (sum.s) to understand how to create .dump file
+3. Create a more complex test case that has memory loads and stores
+    -Use first data memory slot to store length of an array, n
+    -Use the next n data memory slots to store values(1, 2, 3,..., n)
+4. Create a final test case that uses all remaining untested instructions
