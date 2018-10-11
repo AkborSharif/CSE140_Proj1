@@ -216,7 +216,7 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
             d->regs.r.funct = funct;
 
             if(funct != 0x8 && d->regs.r.rd == 0)   //Cannot write $0, exclude jr
-                exit(0);
+                exit(0);    //if its jr's oppcode and rd stage still fills up with 0 values than quit bc we dont save anything in rd for jr
 
             rVals->R_rs = mips.registers[rs];
             rVals->R_rt = mips.registers[rt];
@@ -248,21 +248,23 @@ void Decode ( unsigned int instr, DecodedInstr* d, RegVals* rVals) {
             if(opcode != 0x2b && opcode != 0x4 &&
                opcode != 0x5  && d->regs.r.rt == 0)   //Cannot write $0
                exit(0);                      //Exclude: sw, beq, and bne
+            //if its oppcode for sw, beq, and bne and rt stage still fills up with 0 values than quit bc we dont save anything in rt for sw, beq, and bne
+
 
             rVals->R_rs = mips.registers[rs];
-            rVals->R_rt = mips.registers[rt];
+            rVals->R_rt = mips.registers[rt];     //we need this for sw, bne and beq bc they donst write they use the reg val for some other stuff
 
             switch(opcode) {
                 case 0x4:   // beq
                 case 0x5:   // bne
-                    if(signMask & immed) {
+                    if(signMask & immed) {    //if the 16th bit is 1
                         immed = immed << 2; //add 00 to the end
-                        immed += 0xfffc0000; //sign-extend
+                        immed += 0xfffc0000; //sign-extend or pad the val with 1 untill 32 bits
                     }
                     else {
                         immed = immed << 2; //add 00 to end
                     }
-                    immed += mips.pc + 4;
+                    immed += mips.pc + 4;     //make the adress 32 bits
                     break;
                 case 0x9:   // addiu
                 case 0x23:  // lw
@@ -313,10 +315,10 @@ void PrintInstruction ( DecodedInstr* d) {
                         printf("slt\t$%d, $%d, $%d\n", d->regs.r.rd, d->regs.r.rs, d->regs.r.rt);
                         break;
                     case 0x00:  // sll
-                        printf("sll\t$%d, $%d, %d\n", d->regs.r.rt, d->regs.r.rt, d->regs.r.shamt);
+                        printf("sll\t$%d, $%d, %d\n", d->regs.r.rd, d->regs.r.rt, d->regs.r.shamt);  //rd?
                         break;
                     case 0x02:  // srl
-                        printf("srl\t$%d, $%d, %d\n", d->regs.r.rt, d->regs.r.rt, d->regs.r.shamt);
+                        printf("srl\t$%d, $%d, %d\n", d->regs.r.rd, d->regs.r.rt, d->regs.r.shamt);  //rd?
                         break;
                     case 0x08:  // jr
                         printf("jr\t$%d\n", d->regs.r.rs);
@@ -402,8 +404,8 @@ int Execute ( DecodedInstr* d, RegVals* rVals) {
             break;
         case 2: /* j and jal */
         case 3:
-            val = d->regs.j.target;
-            rVals->R_rt = mips.pc + 4;
+            val = d->regs.j.target;       //val is the adress to jump to
+            rVals->R_rt = mips.pc + 4;    //use   rVals->R_rt to save the adtress of next ins to store it to reg $31
             break;
         case 16: // Coprocessor instructions (unused)
         case 17:
